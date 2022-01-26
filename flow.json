@@ -1,0 +1,32 @@
+{
+	"emulators": {
+		"default": {
+			"port": 3569,
+			"serviceAccount": "emulator-account"
+		}
+	},
+	"networks": {
+		"emulator": "127.0.0.1:3569",
+		"mainnet": "access.mainnet.nodes.onflow.org:9000",
+		"testnet": "access.devnet.nodes.onflow.org:9000"
+	},
+	"accounts": {
+		"emulator-account": {
+			"address": "f8d6e0586b0a20c7",
+			"key": "e859a7007fa6af3869d86027c72565fa54b4748f765cd8cb4deb61e2616f4ce4"
+		}
+	},
+	"contracts": {
+		"ZeroCopySink": "./contracts/ZeroCopySink.cdc",
+		"ZeroCopySource": "./contracts/ZeroCopySource.cdc",
+		"CCUtils": "./contracts/CCUtils.cdc",
+		"CrossChainManager": "./contracts/CrossChainManager.cdc",
+		"LockProxy": "./contracts/LockProxy.cdc"
+	},
+	"deployments": {
+		"emulator": {
+			"emulator-account": ["ZeroCopySink", "ZeroCopySource", "CCUtils", "CrossChainManager", "LockProxy"]
+		}
+	}
+}
+ 
