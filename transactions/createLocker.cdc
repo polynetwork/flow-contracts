@@ -4,11 +4,13 @@ import CrossChainManager from 0xb68073c0c84c26e2
 transaction {  
     prepare(acct: AuthAccount) {
 
+        // --------- edit below ---------
         var lockerStoragePath = /storage/LockProxyBasicLocker
         // name = "LockProxy"
         var lockerPublicPath = /public/polynetwork_4fc2514492f4ec4dd924c68cdc0ddbdacc1d57411b457e59c38ba583e5ea3dc3   
+                // --------- edit above ---------
 
-
+        // don't edit below
         let locker <- LockProxy.createEmptyLocker()
         acct.save<@LockProxy.Locker>(<-locker, to: lockerStoragePath)
         log("Empty locker stored, storagePath: ")

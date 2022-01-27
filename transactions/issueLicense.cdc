@@ -4,10 +4,13 @@ import LockProxy from 0xb68073c0c84c26e2
 transaction {
     prepare(acct: AuthAccount) {
 
+        // --------- edit below ---------
         var receiverAccount: UInt64 = 0xb68073c0c84c26e2
         var receiverName: String = "LockProxy"
         var receiverPath: PublicPath = /public/polynetwork_4fc2514492f4ec4dd924c68cdc0ddbdacc1d57411b457e59c38ba583e5ea3dc3
+        // --------- edit above ---------
 
+        // don't edit below
         var CAPath: PrivatePath = /private/PolyCA
 
         var CARef = acct.getCapability<&CrossChainManager.CertificationAuthority>(CAPath).borrow() ?? panic("Could not borrow a reference to the CA")
