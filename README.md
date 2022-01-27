@@ -24,17 +24,17 @@ Interface:
 Resource & Struct:
 + **CrossChainMessageData**: The message from source chain
 + **@CrossChainMessage**: @CrossChainMessage is used to verify the identity of CrossChainManager. Only CrossChainManager contract is able to create @CrossChainMessage.
-+ **@License**: Used to verify the identity of buiness resources(buiness resources mean those resources who use CrossChainManager to deliver cross-chain messages)
-+ **@CertificationAuthority**: Used to issue lincense to buiness resource.
++ **@License**: Used to verify the identity of business resources(business resources mean those resources who use CrossChainManager to deliver cross-chain messages)
++ **@CertificationAuthority**: Used to issue lincense to business resource.
 + **@Admin**: Used to manage the CrossChainManager contract
 
 Funtion:
-+ crossChain(): Buiness resources call this function to send cross-chain message.
-+ verifySigAndExecuteTx(): Its called by relayer(realyer is a bot that relay transactions between different chains). Relayer relay data from relay chain to flow(or other chains) CrossChainManager, CrossChainManager will verify the data(In most case, it will verify both header, proof & signature, but flow do not support arbitrary signature verification & keccak256 now, so flow CrossChainManager only verify specially made signatures) and handle the data(call buiness resources based on data).
++ crossChain(): business resources call this function to send cross-chain message.
++ verifySigAndExecuteTx(): Its called by relayer(realyer is a bot that relay transactions between different chains). Relayer relay data from relay chain to flow(or other chains). CrossChainManager will verify the data(In most case, it will verify both header, proof & signature, but flow do not support arbitrary signature verification & keccak256 now, so flow CrossChainManager only verify specially made signatures) and handle the data(call business resources based on data).
 
 ### 4. LockProxy
 
-LockProxy is a FT cross-chain dapp. It receives FT from user on source-chain, and release corresponding asset to user on target-chain.
+LockProxy is a business contract that implement FT cross-chain. It receives FT from user on source-chain, and release corresponding asset to user on target-chain.
 
 Resource:
 + **@Locker**: Locker receives vaults from user and send cross-chain message via CrossChainManager to LockProxy on target-chain. LockProxy also receive cross-chain message from LockProxy on other chain via CrossChainManager, and release FT to user.
