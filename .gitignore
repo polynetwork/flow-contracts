@@ -4,3 +4,4 @@ flow.mainnet.json
 
 .DS_Store
 abandon/
+node_modules/

@@ -1,23 +1,27 @@
-import LockProxy from 0xb68073c0c84c26e2
-import FungibleToken from 0x9a0766d93b6608b7
+import LockProxy from "../../contracts/LockProxy.cdc"
+import FungibleToken from "../../contracts/FungibleToken.cdc"
 
 // import FungibleToken from 0xee82856bf20e2aa6 // on emulator
 // import FungibleToken from 0x9a0766d93b6608b7 // on testnet
 // import FungibleToken from 0xf233dcee88fe0abe // on mainnet
 
-transaction {
+transaction(
+    lockerAccount: Address,
+    vaultPath: Path,
+    toChainId: UInt64,
+    toAddressStr: String,
+    amount: UFix64
+) {
     prepare(acct: AuthAccount) {
         
+        // edit below if you don't use default value
         // --------- edit below ---------
-        var lockerAccount: Address = 0xb68073c0c84c26e2
         var lockerPublicPath = /public/polynetwork_4fc2514492f4ec4dd924c68cdc0ddbdacc1d57411b457e59c38ba583e5ea3dc3
-        var vaultStoragePath = /storage/exampleTokenVault
-        var toChainId: UInt64 = 999
-        var toAddress: [UInt8] = "e2264cc8c07380b6146578616d706c65546f6b656e5265636569766572".decodeHex()
-        var amount: UFix64 = 8.0
         // --------- edit above ---------
 
         // don't edit below
+        let toAddress: [UInt8] = toAddressStr.decodeHex()
+        let vaultStoragePath: StoragePath = (vaultPath as? StoragePath)!
         let lockerRef = getAccount(lockerAccount).getCapability<&LockProxy.Locker{LockProxy.Portal}>(lockerPublicPath).borrow()
             ?? panic("fail to borrow Locker")
 
