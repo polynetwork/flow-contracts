@@ -1,8 +1,12 @@
-import CrossChainManager from 0xb68073c0c84c26e2
+import CrossChainManager from "../../contracts/CrossChainManager.cdc"
 
 transaction {
     prepare(acct: AuthAccount) {
-        var adminPath = /private/CCMAdmin
+        // edit below if you don't use default value
+        // --------- edit below ---------      
+        var adminPath = /private/CCMAdmin 
+        // --------- edit above ---------
+
         var adminRef = acct.getCapability(adminPath)
             .borrow<&CrossChainManager.Admin>() 
             ?? panic("fail to borrow admin reference")

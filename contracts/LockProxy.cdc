@@ -9,6 +9,16 @@ import FungibleToken from "./flowFT/FungibleToken.cdc"
 
 pub contract LockProxy {
 
+    pub event LockerCreated(lockerUUID: UInt64)
+    pub event BindProxyEvent(lockerUUID: UInt64, toChainId: UInt64, targetProxyHash: String)
+    pub event BindAssetEvent(lockerUUID: UInt64, fromAssetHash: String, toChainId: UInt64, targetAssetHash: String)
+    pub event UnlockEvent(lockerUUID: UInt64, toAssetHash: String, toAddress: String, amount: UInt256)
+    pub event LockEvent(lockerUUID: UInt64, fromAssetHash: String, toChainId: UInt64, toAssetHash: String, toAddress: String, amount: UInt256)
+
+    pub resource interface Balance {
+        pub fun getBalanceFor(_ tokenType: String): UFix64
+    }
+
     pub resource interface BindingManager {
         pub var proxyHashMap: {UInt64: [UInt8]}
         pub var assetHashMap: {String: {UInt64: [UInt8]}}
@@ -19,12 +29,12 @@ pub contract LockProxy {
 
     pub resource interface Portal {
         pub fun lock(fund: @FungibleToken.Vault, toChainId: UInt64 , toAddress: [UInt8]): Bool
-        pub fun deposite(_ fund: @FungibleToken.Vault)
+        pub fun deposit(_ fund: @FungibleToken.Vault)
         pub fun getTargetAsset(fromTokenType: String, toChainId: UInt64): [UInt8]
         pub fun getTargetProxy(_ toChainId: UInt64): [UInt8]
     }
 
-    pub resource Locker: BindingManager, Portal, CrossChainManager.LicenseStore, CrossChainManager.MessageReceiver {
+    pub resource Locker: Balance, BindingManager, Portal, CrossChainManager.LicenseStore, CrossChainManager.MessageReceiver {
         pub var drawers: @{String: FungibleToken.Vault}
         pub var license: @CrossChainManager.License
         pub var proxyHashMap: {UInt64: [UInt8]}
@@ -54,8 +64,26 @@ pub contract LockProxy {
             return true
         }
 
+        pub fun getBalanceFor(_ tokenType: String): UFix64 {
+            var vaultOpt: @FungibleToken.Vault? <- nil
+            vaultOpt <-> self.drawers[tokenType]
+            var balance: UFix64 = UFix64(0)
+            if vaultOpt == nil {
+                destroy vaultOpt
+                balance = UFix64(0)
+            } else {
+                var vault: @FungibleToken.Vault <- vaultOpt!
+                balance = vault.balance
+                self.drawers[tokenType] <-! vault
+            }
+            return balance
+        }
+
         pub fun bindProxyHash(toChainId: UInt64, targetProxyHash: [UInt8]): Bool {
             self.proxyHashMap[toChainId] = targetProxyHash
+
+            emit BindProxyEvent(lockerUUID: self.uuid, toChainId: toChainId, targetProxyHash: String.encodeHex(targetProxyHash))
+
             return true
         }  
 
@@ -63,6 +91,9 @@ pub contract LockProxy {
             var tokenMap: {UInt64: [UInt8]} = self.assetHashMap[fromTokenType] ?? {}
             tokenMap[toChainId] = toAssetHash
             self.assetHashMap[fromTokenType] = tokenMap
+
+            emit BindAssetEvent(lockerUUID: self.uuid, fromAssetHash: fromTokenType, toChainId: toChainId, targetAssetHash: String.encodeHex(toAssetHash))
+
             return true
         }
 
@@ -77,7 +108,7 @@ pub contract LockProxy {
 
         // cross chain entrance
         pub fun lock(fund: @FungibleToken.Vault, toChainId: UInt64 , toAddress: [UInt8]): Bool {
-            var amount = UInt256(fund.balance)
+            var amount = LockProxy.ufix64ToUint256(fund.balance)
             var fromTokenType = fund.getType().identifier
             var toAssetHash = self.getTargetAsset(fromTokenType: fromTokenType, toChainId: toChainId)
             assert(toAssetHash.length != 0, message: "lock: empty illegal toAssetHash")
@@ -85,7 +116,7 @@ pub contract LockProxy {
             assert(toContract.length != 0, message: "lock: empty illegal toProxyHash")
 
             // transfer asset to lock_proxy contract
-            self.deposite(<-fund)
+            self.deposit(<-fund)
 
             var txData: [UInt8] = []
             txData.appendAll(ZeroCopySink.WriteVarBytes(toAssetHash))
@@ -98,10 +129,12 @@ pub contract LockProxy {
             outputLicense <-> self.license
             destroy outputLicense
 
+            emit LockEvent(lockerUUID: self.uuid, fromAssetHash: fromTokenType, toChainId: toChainId, toAssetHash: String.encodeHex(toAssetHash), toAddress: String.encodeHex(toAddress), amount: amount)
+
             return true
         }
 
-        pub fun deposite(_ fund: @FungibleToken.Vault) {
+        pub fun deposit(_ fund: @FungibleToken.Vault) {
             var tokenType = String.encodeHex(fund.getType().identifier.utf8)
             var vaultOpt: @FungibleToken.Vault? <- nil
             vaultOpt <-> self.drawers[tokenType]
@@ -134,7 +167,7 @@ pub contract LockProxy {
             assert(toAddress.length != 0,
                 message: "unlock: toAddress cannot be empty")
 
-            var fund <- self.withdrawFromDrawer(amount: UFix64(amount), tokenType: String.encodeHex(toAssetHash))
+            var fund <- self.withdrawFromDrawer(amount: LockProxy.uint256ToUfix64(amount), tokenType: String.encodeHex(toAssetHash))
             var toAccount = LockProxy._getAccountFromCompositeAddress(toAddress)
             var recipient = getAccount(toAccount)
             var receivePath = LockProxy._getPathFromCompositeAddress(toAddress)
@@ -144,6 +177,8 @@ pub contract LockProxy {
                       ?? panic("unlock: Could not borrow a reference to the receiver")
             
             receiverRef.deposit(from: <-fund)
+
+            emit UnlockEvent(lockerUUID: self.uuid, toAssetHash: String.encodeHex(toAssetHash), toAddress: String.encodeHex(toAddress), amount: amount)
 
             return true
         }
@@ -183,7 +218,9 @@ pub contract LockProxy {
     }
 
     pub fun createEmptyLocker(): @Locker {
-        return <- create Locker()
+        var locker: @Locker <- create Locker()
+        emit LockerCreated(lockerUUID: locker.uuid)
+        return <-locker
     }
 
     access(contract) fun _getAccountFromCompositeAddress(_ compositeAddress: [UInt8]): Address {
@@ -206,12 +243,28 @@ pub contract LockProxy {
     }
 
     pub fun uint64ToAddress(_ n: UInt64): Address {
-        if (n >= 0x8000000000000000) {
-            return Address(Int128(n)+0x10000000000000000)
-        } else {
-            return Address(Int128(n))
-        }
+        return Address(n)
     }
+
+    // UFix64 to UInt256 , decimal 8
+    pub fun ufix64ToUint256(_ num: UFix64): UInt256 {
+        var multiple: UInt256 = 10^8
+        var left: UInt256 = UInt256(num)
+        var right: UFix64 = num - UFix64(left)
+
+        return left * multiple + UInt256(right * UFix64(multiple))
+
+    }
+
+    // UInt256 to UFix64 , decimal 8
+    pub fun uint256ToUfix64(_ num: UInt256): UFix64 {
+        var multiple: UInt256 = 10^8
+        var left: UInt256 = num / multiple
+        var right: UInt256 = num % multiple
+        
+        return UFix64(left) + UFix64(right) / UFix64(multiple)
+    }
+
 
 }
  

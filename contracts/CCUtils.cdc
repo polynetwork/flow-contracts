@@ -116,11 +116,7 @@ pub contract CCUtils {
     }
 
     pub fun uint64ToAddress(_ n: UInt64): Address {
-        if (n >= 0x8000000000000000) {
-            return Address(Int128(n)+0x10000000000000000)
-        } else {
-            return Address(Int128(n))
-        }
+        return Address(n)
     }
 }
  
