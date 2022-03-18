@@ -1,5 +1,7 @@
+// ZeroCopySource is used to serialize bytes
 pub contract ZeroCopySink {
-
+    
+    // WriteBool takes a Bool as input and returns bytes after serialize
     pub fun WriteBool(_ b: Bool): [UInt8] {
         var buff: [UInt8] = [0]
         if b {
@@ -8,18 +10,22 @@ pub contract ZeroCopySink {
         return buff
     }
 
+    // WriteByte takes a byte(UInt8) as input and returns bytes after serialize
     pub fun WriteByte(_ b: UInt8): [UInt8] {
         return [b]
     }
 
+    // WriteUint8 takes a UInt8 as input and returns bytes after serialize
     pub fun WriteUint8(_ b: UInt8): [UInt8] {
         return [b]
     }
 
+    // WriteUint16 takes a UInt16 as input and returns bytes after serialize
     pub fun WriteUint16(_ b: UInt16): [UInt8] {
         return [UInt8(b%256), UInt8(b/256)]
     }
 
+    // WriteUint32 takes a UInt32 as input and returns bytes after serialize
     pub fun WriteUint32(_ b: UInt32): [UInt8] {
         let buff: [UInt8] = []
         let size = 4
@@ -33,6 +39,7 @@ pub contract ZeroCopySink {
         return buff
     }
 
+    // WriteUint64 takes a UInt64 as input and returns bytes after serialize
     pub fun WriteUint64(_ b: UInt64): [UInt8] {
         let buff: [UInt8] = []
         let size = 8
@@ -46,6 +53,7 @@ pub contract ZeroCopySink {
         return buff
     }
 
+    // WriteUint255 takes a UInt256 as input and returns bytes after serialize
     pub fun WriteUint255(_ b: UInt256): [UInt8] {
         let buff: [UInt8] = []
         let size = 32
@@ -59,10 +67,12 @@ pub contract ZeroCopySink {
         return buff
     }
 
+    // WriteVarBytes takes bytes([UInt8]) as input and returns bytes after serialize
     pub fun WriteVarBytes(_ data: [UInt8]): [UInt8] {
         return self.WriteVarUint(UInt64(data.length)).concat(data)
     }
 
+    // WriteVarUint takes a UInt64 as input and returns bytes after serialize
     pub fun WriteVarUint(_ v: UInt64): [UInt8] {
         if (v < 0xFD) {
             return [UInt8(v)]

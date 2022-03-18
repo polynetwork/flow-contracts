@@ -15,38 +15,65 @@ pub contract LockProxy {
     pub event UnlockEvent(lockerUUID: UInt64, toAssetHash: String, toAddress: String, amount: UInt256)
     pub event LockEvent(lockerUUID: UInt64, fromAssetHash: String, toChainId: UInt64, toAssetHash: String, toAddress: String, amount: UInt256)
 
+    // used to check balances
     pub resource interface Balance {
+        /*
+            tokentype: @FungibleToken.Vault.getType().identifier
+         */
         pub fun getBalanceFor(_ tokenType: String): UFix64
     }
-
+    
+    // Maintain the binding relationship
     pub resource interface BindingManager {
-        pub var proxyHashMap: {UInt64: [UInt8]}
-        pub var assetHashMap: {String: {UInt64: [UInt8]}}
-
+        /*
+            toChainId: to chain id
+            targetProxyHash: contract address of target chain LockProxy
+         */
         pub fun bindProxyHash(toChainId: UInt64, targetProxyHash: [UInt8]): Bool  
+        
+        /*
+            fromTokenType: @FungibleToken.Vault.getType().identifier
+            toChainId: to chain id
+            toAssetHash: token Address on target chain
+         */
         pub fun bindAssetHash(fromTokenType: String, toChainId: UInt64, toAssetHash: [UInt8]): Bool 
     }
 
+    // Available to users
     pub resource interface Portal {
+        // lock token into Locker on Flow, and release token to user from target chain LockProxy 
+        /*
+            fund: fund needs to cross chain
+            toChainId: target chain id
+            toAddress: receiver address on target chain
+         */
         pub fun lock(fund: @FungibleToken.Vault, toChainId: UInt64 , toAddress: [UInt8]): Bool
+
+        // deposite @FungibleToken.Vault into Locker 
         pub fun deposit(_ fund: @FungibleToken.Vault)
+
+        // get mapped token address on target chain 
         pub fun getTargetAsset(fromTokenType: String, toChainId: UInt64): [UInt8]
+
+        // get LockProxy Address on target chain
         pub fun getTargetProxy(_ toChainId: UInt64): [UInt8]
     }
 
     pub resource Locker: Balance, BindingManager, Portal, CrossChainManager.LicenseStore, CrossChainManager.MessageReceiver {
-        pub var drawers: @{String: FungibleToken.Vault}
+        access(self) var drawers: @{String: FungibleToken.Vault}
         pub var license: @CrossChainManager.License
-        pub var proxyHashMap: {UInt64: [UInt8]}
-        pub var assetHashMap: {String: {UInt64: [UInt8]}}
+        access(self) var proxyHashMap: {UInt64: [UInt8]}
+        access(self) var assetHashMap: {String: {UInt64: [UInt8]}}
 
         // called by CrossChainManager
+        // refer to the  description at the interface
         pub fun receiveLicense(license: @CrossChainManager.License) {
             var emptyLicense: @CrossChainManager.License <- self.license <- license
             destroy emptyLicense
         }
 
         // called by CrossChainManager
+        // refer to the  description at the interface
         pub fun receiveCrossChainMessage(
             crossChainMessageData: CrossChainManager.CrossChainMessageData,
             crossChainMessage: @CrossChainManager.CrossChainMessage?
@@ -64,6 +91,7 @@ pub contract LockProxy {
             return true
         }
 
+        // refer to the  description at the interface
         pub fun getBalanceFor(_ tokenType: String): UFix64 {
             var vaultOpt: @FungibleToken.Vault? <- nil
             vaultOpt <-> self.drawers[tokenType]
@@ -79,6 +107,7 @@ pub contract LockProxy {
             return balance
         }
 
+        // refer to the  description at the interface
         pub fun bindProxyHash(toChainId: UInt64, targetProxyHash: [UInt8]): Bool {
             self.proxyHashMap[toChainId] = targetProxyHash
 
@@ -87,6 +116,7 @@ pub contract LockProxy {
             return true
         }  
 
+        // refer to the  description at the interface
         pub fun bindAssetHash(fromTokenType: String, toChainId: UInt64, toAssetHash: [UInt8]): Bool {
             var tokenMap: {UInt64: [UInt8]} = self.assetHashMap[fromTokenType] ?? {}
             tokenMap[toChainId] = toAssetHash
@@ -97,16 +127,18 @@ pub contract LockProxy {
             return true
         }
 
+        // refer to the  description at the interface
         pub fun getTargetAsset(fromTokenType: String, toChainId: UInt64): [UInt8] {
             var tokenMap: {UInt64: [UInt8]} = self.assetHashMap[fromTokenType] ?? {}
             return tokenMap[toChainId] ?? []
         }
 
+        // refer to the  description at the interface
         pub fun getTargetProxy(_ toChainId: UInt64): [UInt8] {
             return self.proxyHashMap[toChainId] ?? []
         }
 
-        // cross chain entrance
+        // refer to the  description at the interface
         pub fun lock(fund: @FungibleToken.Vault, toChainId: UInt64 , toAddress: [UInt8]): Bool {
             var amount = LockProxy.ufix64ToUint256(fund.balance)
             var fromTokenType = fund.getType().identifier
@@ -134,6 +166,7 @@ pub contract LockProxy {
             return true
         }
 
+        // refer to the  description at the interface
         pub fun deposit(_ fund: @FungibleToken.Vault) {
             var tokenType = String.encodeHex(fund.getType().identifier.utf8)
             var vaultOpt: @FungibleToken.Vault? <- nil
@@ -211,7 +244,7 @@ pub contract LockProxy {
         }
     }
 
-    pub var pathStrMap: {String: PublicPath}
+    access(contract) var pathStrMap: {String: PublicPath}
 
     init() {
         self.pathStrMap = {}
@@ -223,11 +256,13 @@ pub contract LockProxy {
         return <-locker
     }
 
+    // recover account from CompositeAddress
     access(contract) fun _getAccountFromCompositeAddress(_ compositeAddress: [UInt8]): Address {
         let tmp = ZeroCopySource.NextUint64(buff: compositeAddress, offset: 0)
         return self.uint64ToAddress((tmp.res as? UInt64)!)
     }
 
+    // recover path from CompositeAddress
     access(contract) fun _getPathFromCompositeAddress(_ compositeAddress: [UInt8]): PublicPath {
         var tmp = ZeroCopySource.NextUint64(buff: compositeAddress, offset: 0)
         tmp = ZeroCopySource.NextVarBytes(buff: compositeAddress, offset: tmp.offset)
@@ -236,6 +271,11 @@ pub contract LockProxy {
         return self.pathStrMap[pathBytesStr]!
     }
 
+    pub fun getPathFromStr(_ pathStrUTF8: String): PublicPath? {
+        return self.pathStrMap[pathStrUTF8]
+    }
+
+    // register a String->PublicPath map since cadence do not support PublicPath() yet
     pub fun registerReceiverPath(pathStr: String, path: PublicPath) {
         assert(pathStr == path.toString().slice(from: 8, upTo: path.toString().length), 
             message: "registerReceiverPath: path and pathStr do not match")

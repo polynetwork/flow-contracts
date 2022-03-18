@@ -10,6 +10,6 @@ transaction(
 
         LockProxy.registerReceiverPath(pathStr: pathStr, path: userVaultPublicPath)
         
-        assert(LockProxy.pathStrMap[String.encodeHex(pathStr.utf8)]!.toString() == userVaultPublicPath.toString(), message: "fail while checkout")
+        assert(LockProxy.getPathFromStr(String.encodeHex(pathStr.utf8))!.toString() == userVaultPublicPath.toString(), message: "fail while checkout")
     }
 }
