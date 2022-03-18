@@ -11,7 +11,9 @@ pub contract FeeManager {
             return FeeManager.withdrawFromDrawer(amount: UFix64, tokenType: String)
         }
     }
-
+    
+    // the fee is used to cover the network fee on target chain
+    // relayer will check FeePayed event to decide whether to relay
     pub fun payFee(tag: String, fund: @FungibleToken.Vault) {
         var feeToken = fund.getType().identifier
         var amount = fund.balance

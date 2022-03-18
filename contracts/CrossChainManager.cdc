@@ -5,6 +5,7 @@ import CCUtils from "./CCUtils.cdc"
 pub contract CrossChainManager {
     
     // interface for contracts that need to use CrossChainManager
+    // LicenseStore is used to receive and store license issued by CrossChainManager
     pub resource interface LicenseStore {
 
         pub var license: @License
@@ -14,6 +15,8 @@ pub contract CrossChainManager {
             }
         }
     }
+    // interface for contracts that need to use CrossChainManager
+    // MessageReceiver is used to receive (and execute) CrossChain message from CrossChainManager
     pub resource interface MessageReceiver {
 
         pub fun receiveCrossChainMessage(
@@ -29,6 +32,12 @@ pub contract CrossChainManager {
     }
     
     // cross chain message struct
+    /*  
+        method: which method should be triggered
+        args: call parameters
+        fromContractAddr: identify which contract the message came from
+        fromChainId: identify which chain the message came from
+     */
     pub struct CrossChainMessageData {
         pub let method: [UInt8]
         pub let args: [UInt8]
@@ -44,10 +53,17 @@ pub contract CrossChainManager {
     }
 
     // cross chain message resource
+    // @CrossChainMessage can only be generate by CrossChainManager, and will be destroyed immediately upon received
+    // so @CrossChainMessage can be used to make sure the cross chain message comes from CrossChainManager
+    /*
+        msgId: identifer of the crossChain message
+        polyTxHash: ToMerkleValue.txHash
+        sourceTxHash: ToMerkleValue.makeTxParam.txHash
+     */
     pub resource CrossChainMessage {
-        pub let msgId: [UInt8]
-        pub let polyTxHash: [UInt8]
-        pub let sourceTxHash: [UInt8]
+        access(contract) let msgId: [UInt8]
+        access(contract) let polyTxHash: [UInt8]
+        access(contract) let sourceTxHash: [UInt8]
 
         init(polyTxHash: [UInt8], sourceTxHash: [UInt8], method: [UInt8], args: [UInt8], fromContractAddr: [UInt8], fromChainId: UInt64) {
             var data = polyTxHash
@@ -63,6 +79,9 @@ pub contract CrossChainManager {
     }
     
     // crossChainMessage receiver need to query CrossChainManager to check if cross chain message is valid
+    // return true if its valid
+    // return false if its invalid
+    // will destroy @CrossChainMessage whether it valid or not
     pub fun checkCrossChainMessage(_ crossChainMessage: @CrossChainMessage, crossChainMessageData: CrossChainMessageData): Bool {
         if self.TemporaryMsgIdStore.length == 0 || !CCUtils.equalBytes(x: crossChainMessage.msgId, y: self.TemporaryMsgIdStore) {
             destroy crossChainMessage
@@ -84,11 +103,18 @@ pub contract CrossChainManager {
     }
     
     // crossChainMessage sender/receiver need to have a designated license
+    /*
+        authorizedName: name of the license owner
+        authorizedAccount: account of the license owner
+        authorizedPath: PublicPath of the license owner
+        isEmpty(): return true if the license is empty (which means its an invalid license)
+        getAuthorizedId(): returns authorizedId(used to identify the license) 
+     */
     pub resource License {
         pub let authorizedName: String
         pub let authorizedAccount: Address
         pub let authorizedPath: PublicPath
-        pub let authorizedId: [UInt8]
+        access(self) let authorizedId: [UInt8]
 
         init(authorizedAccount: UInt64, authorizedName: String) {
 
@@ -108,8 +134,13 @@ pub contract CrossChainManager {
             }
             return false
         }
+
+        pub fun getAuthorizedId(): [UInt8] {
+            return self.authorizedId
+        }
     }
 
+    // returns an empty license(@License.isEmpty() == true)
     pub fun createEmptyLicense(): @License {
         let license <- create License(authorizedAccount: 0x00, authorizedName: "invalid")
         assert(license.isEmpty(), message: "createEmptyLicense: try to create a not empty license")
@@ -119,6 +150,7 @@ pub contract CrossChainManager {
     // CA issue licenses for crossChainMessage sender/receiver
     pub resource CertificationAuthority {
         
+        // issue license, receiver must implement @LicenseStore interface
         pub fun issueLicense(receiverAccount: UInt64, receiverName: String, receiverPath: PublicPath) {
             pre {
                 CrossChainManager.getPublicPathStr(receiverPath) == CrossChainManager.nameToPathIndentifier(receiverName)
@@ -139,6 +171,8 @@ pub contract CrossChainManager {
     }
     
     // check if there is a valid license in given account path
+    // return true only if there is a non_empty @License in given PublicPath of given account
+    // return false if there is no license or there is an empty @License
     pub fun checkLicense(licenseAccount: Address, licensePath: PublicPath): Bool {
         let licenseStoreOpt = getAccount(licenseAccount).getCapability<&{LicenseStore}>(licensePath).borrow()
         if licenseStoreOpt == nil {
@@ -153,19 +187,22 @@ pub contract CrossChainManager {
     pub var paused: Bool
     pub var chainId: UInt64
     pub var EthToPolyTxHashIndex: UInt256
-    pub var ConKeepersPkList: [[UInt8]]
-    pub var FromChainTxExist: {UInt64: {String: Bool}}
-    pub var EthToPolyTxHashMap: {UInt256: String}
+    access(contract) var ConKeepersPkList: [[UInt8]]
+    access(contract) var FromChainTxExist: {UInt64: {String: Bool}}
+    access(contract) var EthToPolyTxHashMap: {UInt256: String}
 
-    pub var TemporaryMsgIdStore: [UInt8]
+    access(contract) var TemporaryMsgIdStore: [UInt8]
 
-    pub var PublicPathMap: {String: PublicPath}
+    access(contract) var PublicPathMap: {String: PublicPath}
 
     // event definition
     pub event InitGenesisKeepersEvent(_ keepers: [String])
     pub event CrossChainEvent(txId: String, fromResource: String, toChainId: UInt64, toContract: String, rawdata: String)
     pub event verifySigAndExecuteTxEvent(fromChainID: UInt64, toContract: String, crossChainTxHash: String, fromChainTxHash: String)
+    pub event PauseEvent()
+    pub event UnpauseEvent()
 
+    // admin can init/pause/unpaue the CrossChianManager and set ChainId 
     pub resource Admin {
         pub fun pause() {
             CrossChainManager.pause()
@@ -183,16 +220,19 @@ pub contract CrossChainManager {
 
     access(account) fun pause() {
         self.paused = true
+        emit PauseEvent()
     }
 
     access(account) fun unpause() {
         self.paused = false
+        emit UnpauseEvent()
     }
 
     access(account) fun setChainId(_ chainId: UInt64) {
         self.chainId = chainId
     }
 
+    // set the keepers' public key of poly chain
     access(account) fun initGenesisKeepers(_ pubKeyList: [[UInt8]]): Bool {
         pre {
             self.paused == false: "initGenesisBlock: contract paused"
@@ -207,7 +247,15 @@ pub contract CrossChainManager {
         emit InitGenesisKeepersEvent(keepers)
         return true
     }
-
+    
+    // call crossChain() to send cross chain message
+    /*
+        licnese: must provide a non-empty license to send crossChain message, this function will return license
+        toChainId: target chain id
+        toContract: target contract
+        method: target method
+        txData: call parameters
+     */
     pub fun crossChain(license: @License, toChainId: UInt64, toContract: [UInt8], method: [UInt8], txData: [UInt8]): @License {
         pre {
             self.paused == false: "crossChain: contract paused"
@@ -217,7 +265,7 @@ pub contract CrossChainManager {
         var paramTxHash = self.EthToPolyTxHashIndex.toBigEndianBytes()
         var rawParam: [UInt8] = ZeroCopySink.WriteVarBytes(paramTxHash)
         rawParam.appendAll(ZeroCopySink.WriteVarBytes(HashAlgorithm.SHA2_256.hash("FlowCrossChainManager".utf8.concat(paramTxHash))))
-        rawParam.appendAll(ZeroCopySink.WriteVarBytes(license.authorizedId))
+        rawParam.appendAll(ZeroCopySink.WriteVarBytes(license.getAuthorizedId()))
         rawParam.appendAll(ZeroCopySink.WriteUint64(toChainId))
         rawParam.appendAll(ZeroCopySink.WriteVarBytes(toContract))
         rawParam.appendAll(ZeroCopySink.WriteVarBytes(method))
@@ -228,13 +276,20 @@ pub contract CrossChainManager {
 
         emit CrossChainEvent(
             txId: String.encodeHex(paramTxHash), 
-            fromResource: String.encodeHex(license.authorizedId), 
+            fromResource: String.encodeHex(license.getAuthorizedId()), 
             toChainId: toChainId, 
             toContract: String.encodeHex(toContract), 
             rawdata: String.encodeHex(rawParam))
         return <-license
     }
 
+    // relayer will relay crossChain message to target chain by call verifySigAndExecuteTx()
+    // will revert if sigs is invalid , or this crossChain tx has already been executed
+    /*
+        sigs: signatures of toMerkleValueBs from poly chain keepers
+        signers: same order as sigs
+        toMerkleValue: serialized ToMerkleValue
+     */
     pub fun verifySigAndExecuteTx(sigs: [[UInt8]], signers: [[UInt8]], toMerkleValueBs: [UInt8]): Bool {
         pre {
             self.paused == false: "verifySigAndExecuteTx: contract paused"
@@ -304,38 +359,47 @@ pub contract CrossChainManager {
         self.TemporaryMsgIdStore = []
         return true
     }
-
+    
+    // recover account from Licenseid
     access(contract) fun _getAccountFromLicenseId(_ licenseId: [UInt8]): Address {
         let tmp = ZeroCopySource.NextUint64(buff: licenseId, offset: 0)
         return CCUtils.uint64ToAddress((tmp.res as? UInt64)!)
     }
 
+    // recover path from LicenseId
     access(contract) fun _getPathFromLicenseId(_ licenseId: [UInt8]): PublicPath {
         var tmp = ZeroCopySource.NextUint64(buff: licenseId, offset: 0)
         tmp = ZeroCopySource.NextVarBytes(buff: licenseId, offset: tmp.offset)
         return CrossChainManager.hashToPublicPathOpt(String.encodeHex((tmp.res as? [UInt8])!))!
     }
 
+    // register a String->PublicPath map since cadence do not support PublicPath() yet
     access(contract) fun setPublicPathMap(_path: PublicPath, pathStr: String) {
         CrossChainManager.PublicPathMap[pathStr] = _path
     }
 
+    // Hash -> PublicPath
     pub fun hashToPublicPathOpt(_ hash: String): PublicPath? {
         return CrossChainManager.PublicPathMap[CrossChainManager.hashToPathIndentifier(hash)]
     }
 
+    // Hash -> PathIndentifier(which has a prefix)
     pub fun hashToPathIndentifier(_ hash: String): String {
         return "polynetwork_".concat(hash)
     }
 
+    // Name -> PathIndentifier(which has a prefix)
     pub fun nameToPathIndentifier(_ _name: String): String {
         return CrossChainManager.hashToPathIndentifier(CrossChainManager.nameToHash(_name))
     }
 
+    // Name -> Hash
     pub fun nameToHash(_ _name: String): String {
         return String.encodeHex(HashAlgorithm.SHA2_256.hash(_name.utf8))
     }
 
+    // PublicPath -> String
+    // e.g. /public/abc -> "abc"
     pub fun getPublicPathStr(_ _path: PublicPath): String {
         return _path.toString().slice(from: 8, upTo: _path.toString().length) 
     }

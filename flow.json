@@ -23,10 +23,6 @@
 		"CrossChainManager": "./contracts/CrossChainManager.cdc",
 		"LockProxy": "./contracts/LockProxy.cdc"
 	},
-	"deployments": {
-		"emulator": {
-			"emulator-account": ["ZeroCopySink", "ZeroCopySource", "CCUtils", "CrossChainManager", "LockProxy"]
-		}
-	}
+	"deployments": {}
 }
  
